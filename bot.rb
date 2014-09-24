@@ -54,7 +54,7 @@ end
 bot = Cinch::Bot.new do
   configure do |c|
     c.server = "irc.freenode.org"
-    c.channels = ["#dockyard", "#bostonember"]
+    c.channels = ["#emberjs", "#emberjs-dev", "#bostonember"]
     c.nick = "docster"
     c.password = ENV['PASSWORD']
     c.plugins.plugins = [ApiPlugin]
