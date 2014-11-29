@@ -19,7 +19,7 @@ $class_list.keys.each do |class_name|
   $valid_classes[class_name.downcase] = class_name
   $valid_classes[class_name.gsub(/\AEmber\./, '').downcase] = class_name
 end
-$tag = '1.7.0'
+$tag = '1.8.0'
 class ApiPlugin
   include Cinch::Plugin
 
