@@ -17,8 +17,14 @@ $valid_classes = {}
 
 $class_list.keys.each do |class_name|
   $valid_classes[class_name.downcase] = class_name
-  $valid_classes[class_name.gsub(/\AEmber\./, '').downcase] = class_name
+  $class_list[class_name]['methods'] = {}
 end
+
+$method_list = ember_docs['classitems'].select { |item| item['itemtype'] == 'method' }
+$method_list.each do |method|
+  $class_list[method['class']]['methods'][method['name']] = method
+end
+
 $tag = '1.8.0'
 class ApiPlugin
   include Cinch::Plugin
@@ -30,20 +36,41 @@ class ApiPlugin
   def help(m)
     m.reply 'Commands:'
     m.reply ' !api <class name> - Links to documentation and source for the given class'
+    m.reply ' !api <class name>#<method name> - Links to documentation and source for the given function'
   end
 
   def api(m)
     debug "api"
-    class_name = m.message.match(/!api (.*)/)[1]
+    matches = m.message.match(/!api (.*?)(?:#(.*))?$/)
+    class_name = matches[1]
+    method_name = matches[2]
 
-    if class_name = $valid_classes[class_name.downcase]
-      m.reply "Docs: http://emberjs.com/api/classes/#{class_name}.html"
+    debug "Class: " + class_name
+    debug "Method: " + method_name unless method_name.nil?
 
-      class_details = $class_list[class_name]
-      file_name = class_details['file'][3..-1]
-      line = class_details['line']
-      url = "https://github.com/emberjs/ember.js/blob/v#{$tag}/#{file_name}#L#{line}"
-      m.reply "Source: #{url}"
+    class_name = $valid_classes[class_name.downcase]
+    class_details = $class_list[class_name]
+
+    if method_name
+      class_methods = class_details['methods']
+      method_details = class_methods[method_name]
+    end
+
+    if class_details && (!method_name || method_details)
+      docs_url = "http://emberjs.com/api/classes/#{class_name}.html"
+      if method_details
+        method_anchor = "\#method_" + method_name.gsub(/[^a-z0-9_-]+/i, '_');
+        docs_url += method_anchor
+      end
+
+      src_details = method_name ? method_details : class_details
+
+      file_name =  src_details['file'][3..-1]
+      line = src_details['line']
+      src_url = "https://github.com/emberjs/ember.js/blob/v#{$tag}/#{file_name}#L#{line}"
+
+      m.reply "Docs: #{docs_url}"
+      m.reply "Source: #{src_url}"
     else
       m.reply 'I blame rwjblue'
     end
