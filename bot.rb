@@ -31,6 +31,9 @@ class ApiPlugin
 
   match /api/, method: :api
   match /help/, method: :help
+  match /learn (.+?) (.+)/, method: :learn
+  match /forget (.+)/, method: :forget
+  match /get (.+)/, method: :get
   # match /source/, method: :source
 
   def help(m)
@@ -73,6 +76,52 @@ class ApiPlugin
       m.reply "Source: #{src_url}"
     else
       m.reply 'I blame rwjblue'
+    end
+  end
+
+  def learn(m, key, value)
+    unless has_access?(m)
+      return m.reply "#{m.user.nick} does not have access"
+    end
+
+    json = JSON.load(File.open('learnings.json', 'r')) || {}
+    return if json.key? key
+    json[key] = value
+
+    write_learnings(json)
+    m.reply "#{key} learned"
+  end
+
+  def forget(m, key)
+    return nil unless has_access?(m)
+
+    json = JSON.load(File.open('learnings.json', 'r')) || {}
+    json.delete(key)
+
+    write_learnings(json)
+  end
+
+  def get(m, key)
+    File.open('learnings.json', 'r') do |file|
+      json = JSON.load(file)
+
+      if json.key?(key)
+        m.reply json[key]
+      else
+        m.reply "404 not found: #{key}"
+      end
+    end
+  end
+
+  private
+
+  def has_access?(m)
+    m.channel.voiced?(m.user) || m.channel.half_opped?(m.user) || m.channel.opped?(m.user)
+  end
+
+  def write_learnings(json)
+    File.open('learnings.json', 'w+') do |file|
+      file.puts JSON.dump(json)
     end
   end
 
