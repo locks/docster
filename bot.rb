@@ -10,6 +10,9 @@ require 'net/http'
 require 'json'
 
 docs_uri = URI('http://builds.emberjs.com/release/ember-docs.json')
+redis_uri = URI(ENV['REDISTOGO_URL'])
+
+REDIS = Redis.new(url: redis_uri)
 
 ember_docs = JSON.parse Net::HTTP.get(docs_uri)
 $class_list = ember_docs['classes']
@@ -25,19 +28,80 @@ $method_list.each do |method|
   $class_list[method['class']]['methods'][method['name']] = method
 end
 
-$tag = '1.8.0'
+$tag = ENV['EMBER_VERSION']
+class LearnPlugin
+  include Cinch::Plugin
+  match /learn (\w+) (.+)$/, method: :learn
+  match /relearn (\w+) (.+)$/, method: :relearn
+  match /forget (\w+)/, method: :forget
+  match /get (\w+)/, method: :get
+  match /learned/, method: :all
+
+  def learn(m, key, value)
+    return if REDIS.exists(namespace_key(key))
+    relearn(m, key, value)
+  end
+
+  def relearn(m, key, value)
+    unless has_access?(m)
+      return m.reply "#{m.user.nick} does not have access"
+    end
+
+    REDIS.set(namespace_key(key), value)
+    m.reply "I learned that \"#{key}\" means: #{value}"
+  end
+
+  def forget(m, key)
+    return nil unless has_access?(m)
+
+    REDIS.del(namespace_key(key))
+    m.reply "I forgot \"#{key}\""
+  end
+
+  def get(m, key)
+    if REDIS.exists(namespace_key(key))
+      m.reply REDIS.get(namespace_key(key))
+    else
+      m.reply "I don't know what \"#{key}\" means"
+    end
+  end
+
+  def all(m)
+    keys = REDIS.keys('learned:*')
+
+    keys.each do |key|
+      m.reply "#{key.gsub('learned:','')}: #{REDIS.get(key)}"
+    end
+
+    m.reply "And that's all I know!"
+  end
+
+  def self.help_reply(m)
+    m.reply ' !learn <key> <value> - Teaches me that the meaning of <key> is <value>, unless I already know a meaning for <key> (requires voice)'
+    m.reply ' !relearn <key> <value> - Teaches me the new meaning of <key> is <value> (requires voice)'
+    m.reply ' !forget <key> - Tells me to foget about <key> (requires voice)'
+    m.reply ' !get <key> - Displays what I know about <key>'
+    m.reply ' !learned - Displays everything I know'
+  end
+
+  private
+
+  def namespace_key(key)
+    "learned:#{key}"
+  end
+
+  def has_access?(m)
+    m.channel.voiced?(m.user) || m.channel.half_opped?(m.user) || m.channel.opped?(m.user)
+  end
+end
+
 class ApiPlugin
   include Cinch::Plugin
 
   match /api/, method: :api
-  match /help/, method: :help
-  match /learn (.+?) (.+)/, method: :learn
-  match /forget (.+)/, method: :forget
-  match /get (.+)/, method: :get
   # match /source/, method: :source
 
-  def help(m)
-    m.reply 'Commands:'
+  def self.help_reply(m)
     m.reply ' !api <class name> - Links to documentation and source for the given class'
     m.reply ' !api <class name>#<method name> - Links to documentation and source for the given function'
   end
@@ -78,62 +142,26 @@ class ApiPlugin
       m.reply 'I blame rwjblue'
     end
   end
-
-  def learn(m, key, value)
-    unless has_access?(m)
-      return m.reply "#{m.user.nick} does not have access"
-    end
-
-    json = JSON.load(File.open('learnings.json', 'r')) || {}
-    return if json.key? key
-    json[key] = value
-
-    write_learnings(json)
-    m.reply "#{key} learned"
-  end
-
-  def forget(m, key)
-    return nil unless has_access?(m)
-
-    json = JSON.load(File.open('learnings.json', 'r')) || {}
-    json.delete(key)
-
-    write_learnings(json)
-  end
-
-  def get(m, key)
-    File.open('learnings.json', 'r') do |file|
-      json = JSON.load(file)
-
-      if json.key?(key)
-        m.reply json[key]
-      else
-        m.reply "404 not found: #{key}"
-      end
-    end
-  end
-
-  private
-
-  def has_access?(m)
-    m.channel.voiced?(m.user) || m.channel.half_opped?(m.user) || m.channel.opped?(m.user)
-  end
-
-  def write_learnings(json)
-    File.open('learnings.json', 'w+') do |file|
-      file.puts JSON.dump(json)
-    end
-  end
-
 end
+class HelpPlugin
+  include Cinch::Plugin
+  match /help/, method: :help
+
+  def help(m)
+    m.reply("Commands:")
+    ApiPlugin.help_reply(m)
+    LearnPlugin.help_reply(m)
+  end
+end
+
 
 bot = Cinch::Bot.new do
   configure do |c|
     c.server = "irc.freenode.org"
-    c.channels = ["#emberjs", "#emberjs-dev", "#bostonember"]
+    c.channels = ENV['CHANNELS'].split(',')#["#emberjs", "#emberjs-dev", "#bostonember"]
     c.nick = "docster"
     c.password = ENV['PASSWORD']
-    c.plugins.plugins = [ApiPlugin]
+    c.plugins.plugins = [ApiPlugin,LearnPlugin,HelpPlugin]
   end
 end
 
