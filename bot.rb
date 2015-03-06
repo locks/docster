@@ -38,7 +38,10 @@ class LearnPlugin
   match /learned/, method: :all
 
   def learn(m, key, value)
-    return if REDIS.exists(namespace_key(key))
+    if REDIS.exists(namespace_key(m, key))
+      m.reply "I already know \"#{key}\""
+      return
+    end
     relearn(m, key, value)
   end
 
@@ -47,30 +50,31 @@ class LearnPlugin
       return m.reply "#{m.user.nick} does not have access"
     end
 
-    REDIS.set(namespace_key(key), value)
+    REDIS.set(namespace_key(m, key), value)
     m.reply "I learned that \"#{key}\" means: #{value}"
   end
 
   def forget(m, key)
     return nil unless has_access?(m)
 
-    REDIS.del(namespace_key(key))
+    REDIS.del(namespace_key(m, key))
     m.reply "I forgot \"#{key}\""
   end
 
   def get(m, key)
-    if REDIS.exists(namespace_key(key))
-      m.reply REDIS.get(namespace_key(key))
+    if REDIS.exists(namespace_key(m, key))
+      m.reply REDIS.get(namespace_key(m, key))
     else
       m.reply "I don't know what \"#{key}\" means"
     end
   end
 
   def all(m)
-    keys = REDIS.keys('learned:*')
+    namespace = "learned:#{m.channel.name}:"
+    keys = REDIS.keys("#{namespace}*")
 
     keys.each do |key|
-      m.reply "#{key.gsub('learned:','')}: #{REDIS.get(key)}"
+      m.reply "#{key.gsub(namespace,'')}: #{REDIS.get(key)}"
     end
 
     m.reply "And that's all I know!"
@@ -86,8 +90,8 @@ class LearnPlugin
 
   private
 
-  def namespace_key(key)
-    "learned:#{key}"
+  def namespace_key(m, key)
+    "learned:#{m.channel.name}:#{key}"
   end
 
   def has_access?(m)
@@ -99,7 +103,6 @@ class ApiPlugin
   include Cinch::Plugin
 
   match /api/, method: :api
-  # match /source/, method: :source
 
   def self.help_reply(m)
     m.reply ' !api <class name> - Links to documentation and source for the given class'
@@ -143,6 +146,7 @@ class ApiPlugin
     end
   end
 end
+
 class HelpPlugin
   include Cinch::Plugin
   match /help/, method: :help
