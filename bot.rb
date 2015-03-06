@@ -135,7 +135,7 @@ class ApiPlugin
 
       src_details = method_name ? method_details : class_details
 
-      file_name =  src_details['file'][3..-1]
+      file_name =  src_details['file']
       line = src_details['line']
       src_url = "https://github.com/emberjs/ember.js/blob/v#{$tag}/#{file_name}#L#{line}"
 
