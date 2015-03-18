@@ -128,8 +128,15 @@ class ApiPlugin
 
     if class_details && (!method_name || method_details)
       docs_url = "http://emberjs.com/api/classes/#{class_name}.html"
-      if method_details
-        method_anchor = "\#method_" + method_name.gsub(/[^a-z0-9_-]+/i, '_');
+      if class_name == 'Ember.computed'
+        method_anchor = "\#method_computed"
+
+        if method_details
+          method_anchor += "_#{method_name.gsub(/[^a-z0-9_-]+/i, '_')}"
+        end
+        docs_url = "http://emberjs.com/api/classes/Ember.html#{method_anchor}"
+      elsif method_details
+        method_anchor = "\#method_#{method_name.gsub(/[^a-z0-9_-]+/i, '_')}"
         docs_url += method_anchor
       end
 
